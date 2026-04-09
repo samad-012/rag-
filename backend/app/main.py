@@ -19,11 +19,7 @@ origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://rag-amber-mu.vercel.app",  # Your specific Vercel URL
-        "http://localhost:3000",            # For local testing
-        "https://rag-backend-2a7a.onrender.com"
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],  # Allows GET, POST, OPTIONS, etc.
     allow_headers=["*"],  # Allows all headers
