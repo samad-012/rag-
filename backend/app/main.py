@@ -40,11 +40,19 @@ document_store = {
 class ChatMessage(BaseModel):
     message: str
 
+# --- Utility Routes ---
+@app.get("/")
+async def root():
+    return {"message": "Project RAG backend is running"}
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "model_loaded": True}
+
+# --- Core Logic ---
 def split_text(text: str, chunk_size: int = 500, overlap: int = 100) -> list[str]:
-    # Safety Check: Prevent infinite loops
     if overlap >= chunk_size:
         raise ValueError("overlap must be smaller than chunk_size")
-
     chunks = []
     step = chunk_size - overlap
     for i in range(0, len(text), step):
@@ -82,7 +90,6 @@ async def upload_file(file: UploadFile = File(...)):
         with open(file_path, "wb") as f:
             f.write(contents)
 
-        # Basic text decode
         try:
             text = contents.decode("utf-8")
         except UnicodeDecodeError:
@@ -107,18 +114,21 @@ async def chat(body: ChatMessage):
         query = body.message.strip()
         if not query: return {"error": "Empty message"}
 
-        relevant_chunks, top_score = retrieve_relevant_chunks(query)
-        THRESHOLD = 0.35 # Routing threshold
+        relevant_chunks, top_score = retrieve_relevant_chunks(query, top_k=3)
+        THRESHOLD = 0.35 
 
-        # Routing Logic
         use_rag = document_store["chunks"] and top_score >= THRESHOLD
         
+        # Refined system message
         system_content = (
-            "You are a helpful AI assistant. Use the provided context to answer. "
-            "If the context is irrelevant, answer based on your general knowledge."
+            "You are a helpful AI assistant. Use the provided context to answer accurately."
         ) if use_rag else "You are a helpful AI assistant."
 
-        user_content = f"Context:\n{'/n'.join(relevant_chunks)}\n\nQuestion:\n{query}" if use_rag else query
+        context_text = "\n".join(relevant_chunks)
+        user_content = (
+            f"Context:\n{context_text}\n\nQuestion:\n{query}" 
+            if use_rag else query
+        )
 
         response = client.chat_completion(
             model="meta-llama/Llama-3.1-8B-Instruct",
@@ -133,7 +143,7 @@ async def chat(body: ChatMessage):
         return {
             "reply": response.choices[0].message.content,
             "source": "rag" if use_rag else "general_chat",
-            "score": round(top_score, 3)
+            "similarity_score": round(top_score, 3)
         }
     except Exception as e:
         return {"error": str(e)}
